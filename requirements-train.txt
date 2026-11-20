@@ -1,16 +1,3 @@
--r requirements.txt
-
-# MNIST download via tensorflow.keras.datasets; the MLP remains pure NumPy.
-tensorflow>=2.18,<3.0
-
-# Data splitting and evaluation metrics.
-scikit-learn>=1.5,<2.0
-
-# Notebook environment and visualizations.
-jupyterlab>=4.2,<5.0
-ipykernel>=6.29,<7.0
-matplotlib>=3.9,<4.0
-
-# Testing and linting.
-pytest>=8.3,<10.0
-ruff>=0.9,<1.0
+# Runtime, training, notebook, testing, and lint dependencies.
+# Requires Python 3.11-3.13. Install from the repository root.
+-e .[train,dev]
