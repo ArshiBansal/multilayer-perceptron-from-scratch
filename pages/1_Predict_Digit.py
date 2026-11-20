@@ -7,12 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import streamlit as st
-from PIL import (
-    DecompressionBombError,
-    Image,
-    ImageOps,
-    UnidentifiedImageError,
-)
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from src.model import NumpyMLP
 from src.visualize import plot_prediction
@@ -142,7 +137,7 @@ if submitted:
             invert=invert,
         )
     except (
-        DecompressionBombError,
+        Image.DecompressionBombError,
         UnidentifiedImageError,
         OSError,
         ValueError,
