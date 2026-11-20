@@ -135,6 +135,8 @@ class NumpyMLP:
             )
         if not np.issubdtype(X.dtype, np.number):
             raise TypeError("X must contain numeric values.")
+        if np.issubdtype(X.dtype, np.complexfloating):
+            raise TypeError("X must contain real numeric values.")
 
         X_array = np.asarray(X, dtype=self.dtype)
         if not np.isfinite(X_array).all():

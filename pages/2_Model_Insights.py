@@ -82,7 +82,7 @@ test_accuracy = metadata.get("test_accuracy")
 validation_accuracy = metadata.get("final_validation_accuracy")
 
 metric_columns = st.columns(4)
-metric_columns[0].metric("Architecture", " → ".join(
+metric_columns[0].metric("Architecture", " -> ".join(
     map(str, (model.input_dim, *model.hidden_dims, model.output_dim))
 ))
 metric_columns[1].metric("Parameters", f"{parameter_count:,}")

@@ -77,7 +77,9 @@ if MODEL_PATH.is_file():
         columns = st.columns(4)
         columns[0].metric(
             "Architecture",
-            " → ".join(map(str, (model.input_dim, *model.hidden_dims, model.output_dim))),
+            " -> ".join(
+                map(str, (model.input_dim, *model.hidden_dims, model.output_dim))
+            ),
         )
         columns[1].metric("Parameters", f"{parameter_count:,}")
         columns[2].metric(

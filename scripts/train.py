@@ -186,7 +186,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"Data split: {len(y_train):,} train, "
         f"{len(y_validation):,} validation"
     )
-    print(f"Architecture: 784 → {' → '.join(map(str, args.hidden_dims))} → 10")
+    print(f"Architecture: 784 -> {' -> '.join(map(str, args.hidden_dims))} -> 10")
 
     model = NumpyMLP(
         input_dim=784,

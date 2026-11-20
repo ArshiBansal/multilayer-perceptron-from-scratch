@@ -84,7 +84,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print(f"Loaded model artifact: {artifact_path}")
     print(
-        f"Architecture: 784 → {' → '.join(map(str, model.hidden_dims))} → 10"
+        f"Architecture: 784 -> {' -> '.join(map(str, model.hidden_dims))} -> 10"
     )
     run_smoke_test(model)
 

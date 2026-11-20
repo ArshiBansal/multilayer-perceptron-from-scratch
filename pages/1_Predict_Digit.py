@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 
 import numpy as np
@@ -36,7 +37,7 @@ def prepare_digit(
     on a black 28 × 28 canvas. The returned array uses the model's normalized
     [0, 1] pixel range.
     """
-    with Image.open(image_bytes) as source:
+    with Image.open(BytesIO(image_bytes)) as source:
         grayscale = source.convert("L")
 
     if invert:

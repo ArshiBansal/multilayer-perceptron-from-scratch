@@ -48,7 +48,7 @@ def test_model_backward_matches_finite_differences(
     hidden_dims: tuple[int, ...],
     activation: str,
 ) -> None:
-    rng = np.random.default_rng(2025)
+    rng = np.random.default_rng(0)
     model = NumpyMLP(
         input_dim=3,
         hidden_dims=hidden_dims,
