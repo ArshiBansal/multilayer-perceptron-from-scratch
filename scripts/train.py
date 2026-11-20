@@ -10,14 +10,13 @@ Then run:
 from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
-from mnist_mlp.data import load_mnist, split_train_validation
-from mnist_mlp.evaluate import evaluate
-from mnist_mlp.model import NumpyMLP
-from mnist_mlp.train import TrainingConfig, train_model
-
+from src.data import load_mnist, split_train_validation
+from src.evaluate import evaluate
+from src.model import NumpyMLP
+from src.train import TrainingConfig, train_model
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 

@@ -7,22 +7,29 @@ from pathlib import Path
 
 import numpy as np
 import streamlit as st
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import (
+    DecompressionBombError,
+    Image,
+    ImageOps,
+    UnidentifiedImageError,
+)
 
-from mnist_mlp.model import NumpyMLP
-from mnist_mlp.visualize import plot_prediction
-
+from src.model import NumpyMLP
+from src.visualize import plot_prediction
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MODEL_PATH = PROJECT_ROOT / "models" / "mnist_mlp.npz"
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+MAX_IMAGE_PIXELS = 40_000_000
+MAX_IMAGE_SIDE = 10_000
 MNIST_CANVAS_SIZE = 28
 DIGIT_SIZE = 20
 
 
 @st.cache_resource(show_spinner="Loading trained model...")
-def load_model(model_path: str) -> NumpyMLP:
+def load_model(model_path: str, artifact_version: tuple[int, int]) -> NumpyMLP:
     """Load and cache the trained model for this Streamlit process."""
+    del artifact_version
     return NumpyMLP.load(model_path)
 
 
@@ -38,6 +45,12 @@ def prepare_digit(
     [0, 1] pixel range.
     """
     with Image.open(BytesIO(image_bytes)) as source:
+        if (
+            source.width > MAX_IMAGE_SIDE
+            or source.height > MAX_IMAGE_SIDE
+            or source.width * source.height > MAX_IMAGE_PIXELS
+        ):
+            raise ValueError("Image dimensions are too large.")
         grayscale = source.convert("L")
 
     if invert:
@@ -89,7 +102,11 @@ if not MODEL_PATH.is_file():
     st.info("Train the model first, for example with `python scripts/train.py`.")
     st.stop()
 
-model = load_model(str(MODEL_PATH))
+artifact_stat = MODEL_PATH.stat()
+model = load_model(
+    str(MODEL_PATH),
+    (artifact_stat.st_mtime_ns, artifact_stat.st_size),
+)
 
 with st.form("digit_prediction_form"):
     uploaded_file = st.file_uploader(
@@ -119,7 +136,12 @@ if submitted:
             image_bytes,
             invert=invert,
         )
-    except (UnidentifiedImageError, OSError, ValueError) as exc:
+    except (
+        DecompressionBombError,
+        UnidentifiedImageError,
+        OSError,
+        ValueError,
+    ) as exc:
         st.error(f"Could not process the uploaded image: {exc}")
         st.stop()
 
@@ -157,5 +179,6 @@ if submitted:
 
 st.caption(
     "Predictions depend on image quality and similarity to MNIST handwriting. "
-    "The displayed probabilities are model outputs, not calibrated confidence estimates."
+    "The displayed probabilities are model outputs, "
+    "not calibrated confidence estimates."
 )

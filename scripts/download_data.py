@@ -14,11 +14,10 @@ from __future__ import annotations
 
 import argparse
 import os
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
-from mnist_mlp.data import load_mnist
-
+from src.data import load_mnist
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -72,7 +71,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"Test images:     {X_test.shape}, dtype={X_test.dtype}")
     print(f"Test labels:     {y_test.shape}, dtype={y_test.dtype}")
     print(f"Pixel range:     {X_train.min()}–{X_train.max()}")
-    print("The dataset remains in the Keras cache; no files were copied into the project.")
+    print(
+        "The dataset remains in the Keras cache; "
+        "no files were copied into the project."
+    )
 
     return 0
 

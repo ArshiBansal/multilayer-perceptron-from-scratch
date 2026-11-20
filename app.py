@@ -6,15 +6,15 @@ from pathlib import Path
 
 import streamlit as st
 
-from mnist_mlp.model import NumpyMLP
-
+from src.model import NumpyMLP
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 MODEL_PATH = PROJECT_ROOT / "models" / "mnist_mlp.npz"
 
 
 @st.cache_resource(show_spinner="Loading trained model...")
-def load_model(model_path: str) -> NumpyMLP:
+def load_model(model_path: str, artifact_version: tuple[int, int]) -> NumpyMLP:
+    del artifact_version
     return NumpyMLP.load(model_path)
 
 
@@ -67,7 +67,11 @@ st.info(
 
 if MODEL_PATH.is_file():
     try:
-        model = load_model(str(MODEL_PATH))
+        artifact_stat = MODEL_PATH.stat()
+        model = load_model(
+            str(MODEL_PATH),
+            (artifact_stat.st_mtime_ns, artifact_stat.st_size),
+        )
         metadata = load_model_metadata(MODEL_PATH)
     except (OSError, TypeError, ValueError) as exc:
         st.error(f"Could not load the model artifact: {exc}")

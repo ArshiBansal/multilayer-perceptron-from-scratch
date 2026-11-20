@@ -3,20 +3,22 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import numpy as np
 
-from mnist_mlp.model import NumpyMLP
-
+from src.model import NumpyMLP
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Validate a saved MNIST MLP artifact and run a prediction smoke test."
+        description=(
+            "Validate a saved MNIST MLP artifact "
+            "and run a prediction smoke test."
+        )
     )
     parser.add_argument(
         "--artifact",
@@ -68,6 +70,26 @@ def run_smoke_test(model: NumpyMLP, *, seed: int = 42) -> None:
     print(f"Example probabilities: {np.round(probabilities[0], 3)}")
 
 
+def test_saved_model_round_trip(tmp_path: Path) -> None:
+    model = NumpyMLP(
+        input_dim=784,
+        hidden_dims=(16, 8),
+        output_dim=10,
+        seed=42,
+    )
+    artifact = model.save(tmp_path / "model.npz")
+    loaded = NumpyMLP.load(artifact)
+
+    rng = np.random.default_rng(7)
+    inputs = rng.random((5, 784), dtype=np.float32)
+    np.testing.assert_allclose(
+        loaded.predict_proba(inputs),
+        model.predict_proba(inputs),
+        rtol=1e-6,
+        atol=1e-7,
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     artifact_path = _resolve_path(args.artifact)
@@ -89,8 +111,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     run_smoke_test(model)
 
     if args.evaluate_test:
-        from mnist_mlp.data import load_mnist
-        from mnist_mlp.evaluate import evaluate
+        from src.data import load_mnist
+        from src.evaluate import evaluate
 
         (_, _), (X_test, y_test) = load_mnist()
         report = evaluate(model, X_test, y_test)

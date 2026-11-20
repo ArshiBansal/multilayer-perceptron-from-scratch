@@ -11,7 +11,6 @@ from typing import Any
 import plotly.graph_objects as go
 import streamlit as st
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RESULTS_PATH = PROJECT_ROOT / "reports" / "experiments.csv"
 
@@ -48,7 +47,8 @@ def parse_experiment_results(csv_text: str) -> list[dict[str, Any]]:
             )
         if not math.isfinite(loss) or loss < 0:
             raise ValueError(
-                f"Validation loss on line {line_number} must be finite and non-negative."
+                f"Validation loss on line {line_number} must be finite "
+                "and non-negative."
             )
 
         experiment: dict[str, Any] = {
@@ -80,7 +80,8 @@ def parse_experiment_results(csv_text: str) -> list[dict[str, Any]]:
                 ) from exc
             if not math.isfinite(seconds) or seconds < 0:
                 raise ValueError(
-                    f"seconds on CSV line {line_number} must be finite and non-negative."
+                    f"seconds on CSV line {line_number} must be finite "
+                    "and non-negative."
                 )
             experiment["seconds"] = seconds
 

@@ -8,9 +8,8 @@ import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 
-from mnist_mlp.model import NumpyMLP
-from mnist_mlp.visualize import plot_first_layer_weights, plot_loss_landscape
-
+from src.model import NumpyMLP
+from src.visualize import plot_first_layer_weights, plot_loss_landscape
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MODEL_PATH = PROJECT_ROOT / "models" / "mnist_mlp.npz"
@@ -18,7 +17,8 @@ LOSS_LANDSCAPE_PATH = PROJECT_ROOT / "reports" / "figures" / "loss_surface.npz"
 
 
 @st.cache_resource(show_spinner="Loading trained model...")
-def load_model(model_path: str) -> NumpyMLP:
+def load_model(model_path: str, artifact_version: tuple[int, int]) -> NumpyMLP:
+    del artifact_version
     return NumpyMLP.load(model_path)
 
 
@@ -71,7 +71,11 @@ if not MODEL_PATH.is_file():
     st.stop()
 
 try:
-    model = load_model(str(MODEL_PATH))
+    artifact_stat = MODEL_PATH.stat()
+    model = load_model(
+        str(MODEL_PATH),
+        (artifact_stat.st_mtime_ns, artifact_stat.st_size),
+    )
     metadata = load_artifact_metadata(MODEL_PATH)
 except (OSError, TypeError, ValueError) as exc:
     st.error(f"Could not load the model artifact: {exc}")

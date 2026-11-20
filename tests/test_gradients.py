@@ -5,11 +5,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mnist_mlp.losses import (
+from src.losses import (
     cross_entropy_from_logits,
     cross_entropy_gradient_from_logits,
 )
-from mnist_mlp.model import NumpyMLP
+from src.model import NumpyMLP
 
 
 def _finite_difference_gradient(
