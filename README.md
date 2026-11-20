@@ -100,9 +100,13 @@ and keep the official test set untouched until a configuration is selected.
 | **MLP implementation** | Fully connected classifier with ReLU or sigmoid hidden activations, He or Xavier initialization, stable softmax, and cross-entropy loss. |
 | **Training** | Mini-batch SGD with optional momentum and L2 regularization; seeded initialization, deterministic shuffling, and stratified train/validation splitting. |
 | **Evaluation** | Aggregate loss and accuracy, confusion matrix, per-class precision/recall/F1, and per-example predictions and probabilities. |
-| **Digit prediction** | Streamlit page prepares uploaded images on a 28 × 28 canvas and displays the model's top predictions. |
-| **Model insights** | Inspect first-layer weights and explore a saved two-dimensional loss landscape. |
-| **Experiment lab** | Configure training runs and compare exported validation results. |
+| **Digit prediction** | Upload up to 20 PNG, JPEG, BMP, GIF, TIFF, or WebP images per batch; inspect predictions in 3D probability and image-quality views, and export results as CSV. Unsupported or invalid files are reported without blocking valid images. |
+| **Image quality tools** | Detect soft edges, compare original and sharpened crops as 3D surfaces, and optionally apply adjustable sharpening before inference. |
+| **Interactive visuals** | Explore 3D network architecture, pixel-intensity terrain, weight surfaces, a batch probability cloud, a batch-quality map, and an animated 3D forward pass based on an image's actual activations. |
+| **Model explainability** | Inspect network architecture, learned weight patterns, first-layer and output-weight surfaces, and the saved three-dimensional loss landscape. |
+| **Training & experiments** | Generate reproducible training commands, filter and compare validation runs, and export selected comparisons. |
+| **Model benchmark** | Measure median inference latency and throughput by batch size, and inspect parameter memory, model artifact size, and estimated multiply-accumulate operations. |
+| **Shared sidebar** | Select the saved model used by inference and inspection, tune 3D neuron detail and animation speed, and open the developer portfolio. |
 | **Notebooks** | Data exploration, a from-scratch MLP, training experiments, interpretability, and 3D loss-landscape analysis. |
 
 <div align="center">
@@ -260,12 +264,21 @@ the reproducible path for producing the app's model artifact.
 
 1. The Home page loads the saved model and displays its architecture and
    recorded metrics.
-2. The prediction page accepts one PNG, JPEG, or BMP image (up to 5 MB),
-   prepares a centered 28 × 28 input, and reports the top classes.
-3. Model Insights visualizes the first-layer weights and available saved loss
-   landscape.
-4. Experiment Lab reads an uploaded or saved CSV of validation results and
-   compares runs.
+2. The prediction page accepts up to 20 PNG, JPEG/JFIF, BMP/DIB, GIF, TIFF, or
+   WebP images (up to 5 MB each), prepares each as a centered 28 × 28 input, and
+   reports the top-three classes. Unsupported or unreadable files trigger a
+   notification and are skipped while valid files continue.
+3. Review the 3D batch-quality and class-probability views plus the selected
+   image's pixel terrain; optionally flag lower-scoring results for manual
+   review; and download the prediction table as CSV. Select any valid image to
+   compare its original and sharpened crops when soft edges are detected, then
+   animate its sampled activations through the 3D network.
+4. Model Explainability visualizes the architecture, learned weights, and
+   available saved loss landscape.
+5. Training & Experiments generates CLI commands and compares an uploaded or
+   saved CSV of validation results.
+6. Model Benchmark measures inference latency and throughput using deterministic
+   synthetic inputs on the machine serving the app.
 
 The app loads the saved artifact; **it does not train a model when it starts**.
 Training is run separately from the command line.
@@ -276,7 +289,7 @@ Training is run separately from the command line.
 |:--|:--|
 | `src/` | NumPy model, activations, data preparation, losses, optimizer, training, evaluation, and visualization modules |
 | `app.py` | Streamlit home page |
-| `pages/` | Digit prediction, model insights, and experiment comparison |
+| `pages/` | Prediction Studio, Model Explainability, Training & Experiments, and Model Benchmark |
 | `scripts/` | Dataset download/validation and CLI training |
 | `tests/` | Gradient checks, model serialization, and direct-command regression tests |
 | `notebooks/` | Guided data, training, and interpretability experiments |
@@ -304,7 +317,7 @@ non-pickle mode.
 
 ## Comparing experiment results
 
-Experiment Lab reads either an uploaded CSV or `reports/experiments.csv`.
+Training & Experiments reads either an uploaded CSV or `reports/experiments.csv`.
 Required columns are `name`, `group`, `val_accuracy`, and `val_loss`.
 Validation accuracy must be between 0 and 1; validation loss must be
 non-negative. Optional columns include `hidden_dims`, `activation`,
@@ -405,8 +418,11 @@ Pylance and the integrated terminal use the same environment.
 - The classifier is a small, fully connected baseline for learning and
   experimentation; it is not a production-grade computer-vision system.
 - The prediction page expects one digit per image and transforms it to resemble
-  MNIST input. Handwriting style, positioning, contrast, and preprocessing can
-  affect results.
+  MNIST input. Each batch accepts up to 20 PNG, JPEG/JFIF, BMP/DIB, GIF, TIFF,
+  or WebP images, with a 5 MB per-image limit. Documents and other non-image
+  files are not accepted. Handwriting style, positioning, contrast, blur, and
+  preprocessing can affect results. Automatic sharpening is a visual heuristic
+  and cannot recover detail lost during capture.
 - Displayed class probabilities are model outputs, **not calibrated
   confidence estimates**.
 - This project focuses on classification, not deployment at scale, GPU
@@ -434,10 +450,13 @@ are separate CLI operations.
 <details>
 <summary><strong>Can I use my own digit image?</strong></summary>
 
-Yes. Upload a PNG, JPEG, or BMP containing one digit. The page converts it to
-grayscale, crops and centers the foreground, and scales it to the model input.
-Images are limited to 5 MB and large decoded dimensions are rejected. An
-invert option is available for dark ink on a light background.
+Yes. Upload a PNG, JPEG/JFIF, BMP/DIB, GIF, TIFF, or WebP containing one digit.
+Other file types, including Word documents and PDFs, are not accepted. The page
+converts images to grayscale, crops and centers the foreground, and scales it
+to the model input. Images are limited to 5 MB and large decoded dimensions are
+rejected. An invert option is available for dark ink on a light background.
+Soft edges are detected and can be gently sharpened before inference; this
+heuristic cannot recreate details absent from the source image.
 
 </details>
 
