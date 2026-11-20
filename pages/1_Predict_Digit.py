@@ -102,11 +102,16 @@ if not MODEL_PATH.is_file():
     st.info("Train the model first, for example with `python scripts/train.py`.")
     st.stop()
 
-artifact_stat = MODEL_PATH.stat()
-model = load_model(
-    str(MODEL_PATH),
-    (artifact_stat.st_mtime_ns, artifact_stat.st_size),
-)
+try:
+    artifact_stat = MODEL_PATH.stat()
+    model = load_model(
+        str(MODEL_PATH),
+        (artifact_stat.st_mtime_ns, artifact_stat.st_size),
+    )
+except (EOFError, KeyError, OSError, TypeError, ValueError) as exc:
+    st.error(f"Could not load the trained model: {exc}")
+    st.caption(f"Expected artifact: `{MODEL_PATH}`")
+    st.stop()
 
 with st.form("digit_prediction_form"):
     uploaded_file = st.file_uploader(
