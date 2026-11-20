@@ -14,6 +14,12 @@ from plotly.subplots import make_subplots
 Normalization = Literal["true", "predicted"] | None
 
 __all__ = [
+    "plot_network_architecture_3d",
+    "plot_activation_flow_animation",
+    "plot_activation_flow_animation_3d",
+    "plot_pixel_surface_3d",
+    "plot_weight_surface_3d",
+    "plot_probability_cloud_3d",
     "plot_training_history",
     "plot_confusion_matrix",
     "plot_first_layer_weights",
@@ -32,6 +38,743 @@ def _finite_array(values: ArrayLike, *, name: str) -> NDArray[np.floating]:
     if not np.isfinite(array).all():
         raise ValueError(f"{name} contains non-finite values.")
     return array
+
+
+def plot_network_architecture_3d(
+    model: object,
+    *,
+    neurons_per_layer: int = 12,
+) -> go.Figure:
+    """Render a sampled, interactive 3D view of a fully connected network."""
+    if (
+        isinstance(neurons_per_layer, bool)
+        or not isinstance(neurons_per_layer, int)
+        or neurons_per_layer <= 0
+    ):
+        raise ValueError("neurons_per_layer must be a positive integer.")
+
+    input_dim = getattr(model, "input_dim", None)
+    hidden_dims = getattr(model, "hidden_dims", None)
+    output_dim = getattr(model, "output_dim", None)
+    if (
+        not isinstance(input_dim, int)
+        or not isinstance(hidden_dims, tuple)
+        or not isinstance(output_dim, int)
+    ):
+        raise TypeError("model must expose input_dim, hidden_dims, and output_dim.")
+
+    dimensions = (input_dim, *hidden_dims, output_dim)
+    if any(width <= 0 for width in dimensions):
+        raise ValueError("model layer dimensions must be positive.")
+
+    layer_names = [
+        "Input",
+        *(f"Hidden {i}" for i in range(1, len(hidden_dims) + 1)),
+        "Output",
+    ]
+    colors = ("#527F94", "#5F8F7A", "#6675A8", "#7891A3")
+    positions: list[
+        tuple[NDArray[np.floating], NDArray[np.floating], NDArray[np.floating]]
+    ] = []
+    node_traces: list[go.Scatter3d] = []
+
+    for layer_index, (name, width) in enumerate(
+        zip(layer_names, dimensions, strict=True)
+    ):
+        visible_indices = np.linspace(
+            0,
+            width - 1,
+            num=min(neurons_per_layer, width),
+            dtype=np.intp,
+        )
+        angles = np.linspace(0.0, 2.0 * np.pi, len(visible_indices), endpoint=False)
+        x_values = np.full(len(visible_indices), layer_index, dtype=np.float64)
+        y_values = np.cos(angles)
+        z_values = np.sin(angles)
+        positions.append((x_values, y_values, z_values))
+
+        node_traces.append(
+            go.Scatter3d(
+                x=x_values,
+                y=y_values,
+                z=z_values,
+                mode="markers",
+                name=f"{name} ({width})",
+                text=[f"{name} neuron {index}" for index in visible_indices],
+                hovertemplate="%{text}<extra></extra>",
+                marker=dict(
+                    size=8,
+                    color=colors[layer_index % len(colors)],
+                    line=dict(color="white", width=1),
+                ),
+            )
+        )
+
+    edge_x: list[float | None] = []
+    edge_y: list[float | None] = []
+    edge_z: list[float | None] = []
+    for left, right in zip(positions[:-1], positions[1:], strict=True):
+        left_x, left_y, left_z = left
+        right_x, right_y, right_z = right
+        for source in range(len(left_x)):
+            for target in range(len(right_x)):
+                edge_x.extend((float(left_x[source]), float(right_x[target]), None))
+                edge_y.extend((float(left_y[source]), float(right_y[target]), None))
+                edge_z.extend((float(left_z[source]), float(right_z[target]), None))
+
+    edge_trace = go.Scatter3d(
+        x=edge_x,
+        y=edge_y,
+        z=edge_z,
+        mode="lines",
+        line=dict(color="rgba(82, 127, 148, 0.28)", width=1),
+        hoverinfo="skip",
+        name="Sampled connections",
+    )
+
+    layer_ticks = [
+        f"{name}<br>{width} units"
+        for name, width in zip(layer_names, dimensions, strict=True)
+    ]
+    figure = go.Figure(data=[edge_trace, *node_traces])
+    figure.update_layout(
+        title="3D network architecture (representative neurons)",
+        template="plotly_dark",
+        scene=dict(
+            xaxis=dict(
+                title="Network layer",
+                tickmode="array",
+                tickvals=list(range(len(dimensions))),
+                ticktext=layer_ticks,
+                backgroundcolor="rgba(0,0,0,0)",
+                gridcolor="#DCE5E9",
+            ),
+            yaxis=dict(visible=False, backgroundcolor="rgba(0,0,0,0)"),
+            zaxis=dict(visible=False, backgroundcolor="rgba(0,0,0,0)"),
+            aspectmode="manual",
+            aspectratio=dict(x=max(1.6, len(dimensions) * 0.65), y=1.2, z=1.2),
+            camera=dict(eye=dict(x=1.65, y=1.5, z=1.15)),
+        ),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        margin=dict(l=0, r=0, t=70, b=0),
+        height=520,
+    )
+    return figure
+
+
+def plot_activation_flow_animation(
+    layer_activations: Sequence[ArrayLike],
+    probabilities: ArrayLike,
+    *,
+    max_units: int = 32,
+) -> go.Figure:
+    """Animate sampled values as one example passes through each network layer."""
+    if (
+        isinstance(max_units, bool)
+        or not isinstance(max_units, int)
+        or max_units <= 0
+    ):
+        raise ValueError("max_units must be a positive integer.")
+    if len(layer_activations) == 0:
+        raise ValueError("layer_activations must contain the input layer.")
+
+    stages: list[tuple[str, NDArray[np.intp], NDArray[np.floating]]] = []
+    for layer_index, layer in enumerate(layer_activations):
+        values = _finite_array(layer, name=f"layer_activations[{layer_index}]")
+        if values.ndim != 2 or values.shape[0] != 1 or values.shape[1] == 0:
+            raise ValueError(
+                "Each activation layer must have shape (1, number_of_units)."
+            )
+        unit_indices = np.linspace(
+            0,
+            values.shape[1] - 1,
+            num=min(max_units, values.shape[1]),
+            dtype=np.intp,
+        )
+        stage_name = (
+            "Input features"
+            if layer_index == 0
+            else f"Hidden layer {layer_index}"
+        )
+        stages.append((stage_name, unit_indices, values[0, unit_indices]))
+
+    probability_values = _finite_array(probabilities, name="probabilities")
+    if probability_values.ndim != 1 or probability_values.size == 0:
+        raise ValueError("probabilities must be a non-empty 1D array.")
+    if np.any(probability_values < 0) or not np.isclose(
+        probability_values.sum(),
+        1.0,
+        rtol=1e-5,
+        atol=1e-7,
+    ):
+        raise ValueError("probabilities must be non-negative and sum to 1.")
+
+    stages.append(
+        (
+            "Output probabilities",
+            np.arange(len(probability_values), dtype=np.intp),
+            probability_values,
+        )
+    )
+
+    frame_names = [f"stage_{index}" for index in range(len(stages))]
+    frames: list[go.Frame] = []
+    for frame_name, (stage_name, indices, values) in zip(
+        frame_names,
+        stages,
+        strict=True,
+    ):
+        if stage_name == "Output probabilities":
+            labels = [f"Digit {index}" for index in indices]
+        elif stage_name == "Input features":
+            labels = [f"Pixel {index}" for index in indices]
+        else:
+            labels = [f"Unit {index}" for index in indices]
+        frames.append(
+            go.Frame(
+                name=frame_name,
+                data=[
+                    go.Bar(
+                        x=labels,
+                        y=values,
+                        marker_color="#5F8F7A",
+                        hovertemplate="%{x}<br>Value: %{y:.4f}<extra></extra>",
+                    )
+                ],
+                layout=go.Layout(
+                    title_text=f"Forward pass - {stage_name}",
+                    yaxis=dict(range=[0.0, max(1.0, float(np.max(values)) * 1.15)]),
+                ),
+            )
+        )
+
+    first_stage = stages[0]
+    initial_labels = [f"Pixel {index}" for index in first_stage[1]]
+    figure = go.Figure(
+        data=[
+            go.Bar(
+                x=initial_labels,
+                y=first_stage[2],
+                marker_color="#527F94",
+                hovertemplate="%{x}<br>Value: %{y:.4f}<extra></extra>",
+            )
+        ],
+        frames=frames,
+    )
+    figure.update_layout(
+        title="Forward pass - Input features",
+        xaxis_title="Sampled units",
+        yaxis_title="Activation / probability",
+        yaxis=dict(range=[0.0, max(1.0, float(np.max(first_stage[2])) * 1.15)]),
+        template="plotly_dark",
+        height=430,
+        margin=dict(l=20, r=20, t=70, b=90),
+        updatemenus=[
+            dict(
+                type="buttons",
+                direction="left",
+                x=0.0,
+                y=1.14,
+                showactive=False,
+                buttons=[
+                    dict(
+                        label="Play",
+                        method="animate",
+                        args=[
+                            None,
+                            {
+                                "fromcurrent": True,
+                                "frame": {"duration": 850, "redraw": True},
+                                "transition": {"duration": 350},
+                            },
+                        ],
+                    ),
+                    dict(
+                        label="Pause",
+                        method="animate",
+                        args=[
+                            [None],
+                            {
+                                "mode": "immediate",
+                                "frame": {"duration": 0, "redraw": False},
+                                "transition": {"duration": 0},
+                            },
+                        ],
+                    ),
+                ],
+            )
+        ],
+        sliders=[
+            dict(
+                active=0,
+                currentvalue=dict(prefix="Stage: "),
+                steps=[
+                    dict(
+                        label=stage_name,
+                        method="animate",
+                        args=[
+                            [frame_name],
+                            {
+                                "mode": "immediate",
+                                "frame": {"duration": 0, "redraw": True},
+                                "transition": {"duration": 0},
+                            },
+                        ],
+                    )
+                    for frame_name, (stage_name, _, _) in zip(
+                        frame_names,
+                        stages,
+                        strict=True,
+                    )
+                ],
+            )
+        ],
+    )
+    return figure
+
+
+def plot_activation_flow_animation_3d(
+    layer_activations: Sequence[ArrayLike],
+    probabilities: ArrayLike,
+    *,
+    max_units: int = 24,
+    frame_duration_ms: int = 900,
+) -> go.Figure:
+    """Animate a single example's sampled activations through a 3D network."""
+    if (
+        isinstance(max_units, bool)
+        or not isinstance(max_units, int)
+        or max_units <= 0
+    ):
+        raise ValueError("max_units must be a positive integer.")
+    if (
+        isinstance(frame_duration_ms, bool)
+        or not isinstance(frame_duration_ms, int)
+        or frame_duration_ms <= 0
+    ):
+        raise ValueError("frame_duration_ms must be a positive integer.")
+    if len(layer_activations) == 0:
+        raise ValueError("layer_activations must contain the input layer.")
+
+    stages: list[tuple[str, NDArray[np.intp], NDArray[np.floating]]] = []
+    for layer_index, layer in enumerate(layer_activations):
+        values = _finite_array(layer, name=f"layer_activations[{layer_index}]")
+        if values.ndim != 2 or values.shape[0] != 1 or values.shape[1] == 0:
+            raise ValueError(
+                "Each activation layer must have shape (1, number_of_units)."
+            )
+        unit_indices = np.linspace(
+            0,
+            values.shape[1] - 1,
+            num=min(max_units, values.shape[1]),
+            dtype=np.intp,
+        )
+        stage_name = (
+            "Input features"
+            if layer_index == 0
+            else f"Hidden layer {layer_index}"
+        )
+        stages.append((stage_name, unit_indices, values[0, unit_indices]))
+
+    probability_values = _finite_array(probabilities, name="probabilities")
+    if probability_values.ndim != 1 or probability_values.size == 0:
+        raise ValueError("probabilities must be a non-empty 1D array.")
+    if np.any(probability_values < 0) or not np.isclose(
+        probability_values.sum(),
+        1.0,
+        rtol=1e-5,
+        atol=1e-7,
+    ):
+        raise ValueError("probabilities must be non-negative and sum to 1.")
+
+    stages.append(
+        (
+            "Output probabilities",
+            np.arange(len(probability_values), dtype=np.intp),
+            probability_values,
+        )
+    )
+
+    positions: list[
+        tuple[NDArray[np.floating], NDArray[np.floating], NDArray[np.floating]]
+    ] = []
+    for layer_index, (_, indices, _) in enumerate(stages):
+        angles = np.linspace(0.0, 2.0 * np.pi, len(indices), endpoint=False)
+        positions.append(
+            (
+                np.full(len(indices), layer_index, dtype=np.float64),
+                np.cos(angles),
+                np.sin(angles),
+            )
+        )
+
+    edge_x: list[float | None] = []
+    edge_y: list[float | None] = []
+    edge_z: list[float | None] = []
+    for left, right in zip(positions[:-1], positions[1:], strict=True):
+        left_x, left_y, left_z = left
+        right_x, right_y, right_z = right
+        for source in range(len(left_x)):
+            for target in range(len(right_x)):
+                edge_x.extend((float(left_x[source]), float(right_x[target]), None))
+                edge_y.extend((float(left_y[source]), float(right_y[target]), None))
+                edge_z.extend((float(left_z[source]), float(right_z[target]), None))
+
+    edge_trace = go.Scatter3d(
+        x=edge_x,
+        y=edge_y,
+        z=edge_z,
+        mode="lines",
+        line=dict(color="rgba(82, 127, 148, 0.2)", width=1),
+        hoverinfo="skip",
+        name="Sampled connections",
+    )
+    layer_names = [stage[0] for stage in stages]
+    layer_traces: list[go.Scatter3d] = []
+    for stage_index, (stage_name, indices, values) in enumerate(stages):
+        x_values, y_values, z_values = positions[stage_index]
+        maximum = float(np.max(np.abs(values)))
+        normalized_values = (
+            np.abs(values) / maximum
+            if maximum > 0
+            else np.zeros_like(values)
+        )
+        labels = [
+            (
+                f"Pixel {index}"
+                if stage_index == 0
+                else f"Digit {index}"
+                if stage_index == len(stages) - 1
+                else f"Unit {index}"
+            )
+            for index in indices
+        ]
+        layer_traces.append(
+            go.Scatter3d(
+                x=x_values,
+                y=y_values,
+                z=z_values,
+                mode="markers",
+                name=stage_name,
+                text=labels,
+                customdata=values,
+                hovertemplate=(
+                    "%{text}<br>Activation: %{customdata:.4f}<extra></extra>"
+                ),
+                marker=dict(
+                    size=8 if stage_index != len(stages) - 1 else 11,
+                    color=normalized_values
+                    if stage_index == 0
+                    else np.zeros(len(indices)),
+                    colorscale="Viridis",
+                    cmin=0,
+                    cmax=1,
+                    opacity=0.95 if stage_index == 0 else 0.15,
+                    showscale=stage_index == 0,
+                    colorbar=(
+                        dict(title="Relative<br>activation")
+                        if stage_index == 0
+                        else None
+                    ),
+                    line=dict(color="white", width=1),
+                ),
+            )
+        )
+
+    frame_names = [f"stage_{index}" for index in range(len(stages))]
+    frames: list[go.Frame] = []
+    for active_stage, frame_name in enumerate(frame_names):
+        frame_data: list[go.Scatter3d] = []
+        for layer_index, (_, _, values) in enumerate(stages):
+            maximum = float(np.max(np.abs(values)))
+            normalized_values = (
+                np.abs(values) / maximum
+                if maximum > 0
+                else np.zeros_like(values)
+            )
+            frame_data.append(
+                go.Scatter3d(
+                    marker=dict(
+                        color=normalized_values
+                        if layer_index <= active_stage
+                        else np.zeros(len(values)),
+                        opacity=0.95 if layer_index <= active_stage else 0.15,
+                    )
+                )
+            )
+        frames.append(
+            go.Frame(
+                name=frame_name,
+                data=frame_data,
+                traces=list(range(1, len(stages) + 1)),
+                layout=go.Layout(
+                    title_text=f"Forward pass · {layer_names[active_stage]}"
+                ),
+            )
+        )
+
+    figure = go.Figure(
+        data=[edge_trace, *layer_traces],
+        frames=frames,
+    )
+    figure.update_layout(
+        title=f"3D forward pass · {layer_names[0]}",
+        template="plotly_white",
+        scene=dict(
+            xaxis=dict(
+                title="Network layer",
+                tickmode="array",
+                tickvals=list(range(len(stages))),
+                ticktext=layer_names,
+                backgroundcolor="rgba(0,0,0,0)",
+                gridcolor="#DCE5E9",
+            ),
+            yaxis=dict(visible=False, backgroundcolor="rgba(0,0,0,0)"),
+            zaxis=dict(visible=False, backgroundcolor="rgba(0,0,0,0)"),
+            aspectmode="manual",
+            aspectratio=dict(x=max(1.6, len(stages) * 0.65), y=1.2, z=1.2),
+            camera=dict(eye=dict(x=1.65, y=1.5, z=1.15)),
+        ),
+        height=580,
+        margin=dict(l=0, r=0, t=80, b=0),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        updatemenus=[
+            dict(
+                type="buttons",
+                direction="left",
+                x=0,
+                y=1.13,
+                showactive=False,
+                buttons=[
+                    dict(
+                        label="Play",
+                        method="animate",
+                        args=[
+                            None,
+                            {
+                                "fromcurrent": True,
+                                "frame": {
+                                    "duration": frame_duration_ms,
+                                    "redraw": True,
+                                },
+                                "transition": {"duration": 350},
+                            },
+                        ],
+                    ),
+                    dict(
+                        label="Pause",
+                        method="animate",
+                        args=[
+                            [None],
+                            {
+                                "mode": "immediate",
+                                "frame": {"duration": 0, "redraw": False},
+                                "transition": {"duration": 0},
+                            },
+                        ],
+                    ),
+                ],
+            )
+        ],
+        sliders=[
+            dict(
+                active=0,
+                currentvalue=dict(prefix="Stage: "),
+                steps=[
+                    dict(
+                        label=stage_name,
+                        method="animate",
+                        args=[
+                            [frame_name],
+                            {
+                                "mode": "immediate",
+                                "frame": {"duration": 0, "redraw": True},
+                                "transition": {"duration": 0},
+                            },
+                        ],
+                    )
+                    for frame_name, stage_name in zip(
+                        frame_names,
+                        layer_names,
+                        strict=True,
+                    )
+                ],
+            )
+        ],
+    )
+    return figure
+
+
+def plot_pixel_surface_3d(
+    image: ArrayLike,
+    *,
+    title: str = "3D pixel-intensity terrain",
+) -> go.Figure:
+    """Render a grayscale image as a 3D pixel-intensity surface."""
+    pixels = _finite_array(image, name="image")
+    if pixels.ndim != 2 or min(pixels.shape) == 0:
+        raise ValueError("image must be a non-empty 2D array.")
+    if np.any(pixels < 0) or np.any(pixels > 1):
+        raise ValueError("image intensities must be in the range [0, 1].")
+
+    figure = go.Figure(
+        data=[
+            go.Surface(
+                x=np.arange(pixels.shape[1]),
+                y=np.arange(pixels.shape[0]),
+                z=pixels,
+                colorscale="Viridis",
+                cmin=0,
+                cmax=1,
+                colorbar=dict(title="Pixel<br>intensity"),
+                hovertemplate=(
+                    "Column: %{x}<br>Row: %{y}"
+                    "<br>Intensity: %{z:.3f}<extra></extra>"
+                ),
+            )
+        ]
+    )
+    figure.update_layout(
+        title=title,
+        scene=dict(
+            xaxis_title="Pixel column",
+            yaxis_title="Pixel row",
+            zaxis_title="Normalized intensity",
+            zaxis=dict(range=[0, 1]),
+            bgcolor="#0B1017",
+            camera=dict(eye=dict(x=1.5, y=1.5, z=1.1)),
+        ),
+        template="plotly_dark",
+        height=520,
+        margin=dict(l=0, r=0, t=70, b=0),
+    )
+    return figure
+
+
+def plot_weight_surface_3d(
+    weights: ArrayLike,
+    *,
+    title: str,
+    x_title: str,
+    y_title: str,
+) -> go.Figure:
+    """Render a two-dimensional weight matrix as a signed 3D surface."""
+    values = _finite_array(weights, name="weights")
+    if values.ndim != 2 or min(values.shape) == 0:
+        raise ValueError("weights must be a non-empty 2D array.")
+
+    color_limit = max(float(np.max(np.abs(values))), 1e-12)
+    figure = go.Figure(
+        data=[
+            go.Surface(
+                x=np.arange(values.shape[1]),
+                y=np.arange(values.shape[0]),
+                z=values,
+                colorscale="RdBu",
+                cmin=-color_limit,
+                cmax=color_limit,
+                colorbar=dict(title="Weight"),
+                hovertemplate=(
+                    f"{y_title}: %{{y}}<br>{x_title}: %{{x}}"
+                    "<br>Weight: %{z:.4f}<extra></extra>"
+                ),
+            )
+        ]
+    )
+    figure.update_layout(
+        title=title,
+        scene=dict(
+            xaxis_title=x_title,
+            yaxis_title=y_title,
+            zaxis_title="Signed weight",
+            aspectmode="auto",
+            bgcolor="#0B1017",
+            camera=dict(eye=dict(x=1.5, y=1.5, z=1.1)),
+        ),
+        template="plotly_dark",
+        height=520,
+        margin=dict(l=0, r=0, t=70, b=0),
+    )
+    return figure
+
+
+def plot_probability_cloud_3d(
+    probabilities: ArrayLike,
+    image_names: Sequence[str],
+) -> go.Figure:
+    """Compare every image's class probabilities in a 3D point cloud."""
+    values = _finite_array(probabilities, name="probabilities")
+    if values.ndim != 2 or min(values.shape) == 0:
+        raise ValueError("probabilities must be a non-empty 2D array.")
+    if len(image_names) != len(values):
+        raise ValueError("image_names length must match the probability rows.")
+    if np.any(values < 0) or not np.allclose(
+        values.sum(axis=1),
+        1.0,
+        rtol=1e-5,
+        atol=1e-7,
+    ):
+        raise ValueError("each probability row must be non-negative and sum to 1.")
+
+    image_indices = np.repeat(np.arange(len(values)), values.shape[1])
+    class_indices = np.tile(np.arange(values.shape[1]), len(values))
+    point_probabilities = values.ravel()
+    point_names = np.repeat(np.asarray(image_names, dtype=str), values.shape[1])
+    figure = go.Figure(
+        go.Scatter3d(
+            x=image_indices,
+            y=class_indices,
+            z=point_probabilities,
+            mode="markers",
+            text=point_names,
+            customdata=point_probabilities,
+            marker=dict(
+                size=6,
+                color=point_probabilities,
+                colorscale="Viridis",
+                cmin=0,
+                cmax=1,
+                colorbar=dict(title="Probability"),
+                line=dict(color="rgba(255,255,255,0.55)", width=0.5),
+            ),
+            hovertemplate=(
+                "%{text}<br>Digit: %{y}"
+                "<br>Probability: %{customdata:.2%}<extra></extra>"
+            ),
+            name="Image-class probabilities",
+        )
+    )
+    figure.update_layout(
+        title="3D prediction probability cloud",
+        template="plotly_dark",
+        scene=dict(
+            xaxis=dict(
+                title="Uploaded image",
+                tickmode="array",
+                tickvals=list(range(len(values))),
+                ticktext=[str(index + 1) for index in range(len(values))],
+                backgroundcolor="rgba(10,14,20,0.9)",
+                gridcolor="#33414F",
+            ),
+            yaxis=dict(
+                title="Digit class",
+                tickmode="array",
+                tickvals=list(range(values.shape[1])),
+                backgroundcolor="rgba(10,14,20,0.9)",
+                gridcolor="#33414F",
+            ),
+            zaxis=dict(
+                title="Class probability",
+                range=[0, 1],
+                backgroundcolor="rgba(10,14,20,0.9)",
+                gridcolor="#33414F",
+            ),
+            camera=dict(eye=dict(x=1.6, y=1.6, z=1.25)),
+        ),
+        height=600,
+        margin=dict(l=0, r=0, t=70, b=0),
+    )
+    return figure
 
 
 def plot_training_history(
@@ -450,10 +1193,12 @@ def plot_loss_landscape(
 
     figure.update_layout(
         title="Loss landscape",
+        template="plotly_dark",
         scene=dict(
             xaxis_title="Direction 1",
             yaxis_title="Direction 2",
             zaxis_title="Loss",
+            bgcolor="#0B1017",
         ),
         height=700,
     )
