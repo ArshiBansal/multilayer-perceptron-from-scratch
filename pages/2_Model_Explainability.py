@@ -8,8 +8,12 @@ from pathlib import Path
 import numpy as np
 import streamlit as st
 
+from src.artifacts import (
+    loss_landscape_path,
+    validate_loss_landscape_model,
+)
 from src.model import NumpyMLP
-from src.sidebar import render_sidebar
+from src.sidebar import render_sidebar, validation_accuracy_from_metadata
 from src.visualize import (
     plot_loss_landscape,
     plot_network_architecture_3d,
@@ -18,7 +22,7 @@ from src.visualize import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MODEL_PATH = PROJECT_ROOT / "models" / "mnist_mlp.npz"
-LOSS_LANDSCAPE_PATH = PROJECT_ROOT / "reports" / "figures" / "loss_surface.npz"
+REPORT_DIR = PROJECT_ROOT / "reports" / "figures"
 
 
 @st.cache_resource(show_spinner="Loading trained model...")
@@ -35,7 +39,13 @@ def load_artifact_metadata(path: Path) -> dict[str, int | float | str | bool]:
         for key in artifact.files:
             if key.startswith("metadata_"):
                 name = key.removeprefix("metadata_")
-            elif key in {"test_accuracy", "final_validation_accuracy"}:
+            elif key in {
+                "test_accuracy",
+                "final_validation_accuracy",
+                "best_validation_accuracy",
+                "best_validation_loss",
+                "best_epoch",
+            }:
                 name = key
             else:
                 continue
@@ -62,6 +72,7 @@ st.set_page_config(
 sidebar_settings = render_sidebar(show_visual_controls=True)
 if sidebar_settings.model_path is not None:
     MODEL_PATH = sidebar_settings.model_path
+LOSS_LANDSCAPE_PATH = loss_landscape_path(MODEL_PATH, REPORT_DIR)
 
 st.title("Model Explainability")
 st.markdown(
@@ -134,7 +145,7 @@ with st.container(border=True):
     evaluation_columns = st.columns(2)
     evaluation_columns[0].caption(
         "Validation · "
-        f"{format_metric(metadata.get('final_validation_accuracy'))}"
+        f"{format_metric(validation_accuracy_from_metadata(metadata))}"
     )
     evaluation_columns[1].caption(
         "Official test set · "
@@ -272,16 +283,11 @@ with landscape_tab:
         "output-layer parameters, not the full high-dimensional loss surface."
     )
 
-    if MODEL_PATH.name != "mnist_mlp.npz":
+    if not LOSS_LANDSCAPE_PATH.is_file():
         st.info(
-            "The saved loss landscape belongs to the default "
-            "`mnist_mlp.npz` artifact. It is hidden for other selected models "
-            "to avoid showing a mismatched visualization."
-        )
-    elif not LOSS_LANDSCAPE_PATH.is_file():
-        st.info(
-            "No saved loss-landscape data is available. Generate it with "
-            "`notebooks/04_3D_Loss_Landscape.ipynb`."
+            f"No loss-landscape data is available for `{MODEL_PATH.name}`. "
+            "Choose that model in `notebooks/04_3D_Loss_Landscape.ipynb` and "
+            "run all cells to generate its matching landscape."
         )
     else:
         try:
@@ -298,6 +304,12 @@ with landscape_tab:
                     raise ValueError(
                         f"Landscape artifact is missing keys: {sorted(missing)}."
                     )
+                landscape_model = (
+                    str(landscape["model_artifact"].item())
+                    if "model_artifact" in landscape.files
+                    else None
+                )
+                validate_loss_landscape_model(MODEL_PATH, landscape_model)
 
                 figure = plot_loss_landscape(
                     landscape["x_grid"],
