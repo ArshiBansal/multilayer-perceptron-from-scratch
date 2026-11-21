@@ -50,7 +50,13 @@ def _load_artifact_metadata(
         for key in artifact.files:
             if key.startswith("metadata_"):
                 name = key.removeprefix("metadata_")
-            elif key in {"test_accuracy", "final_validation_accuracy"}:
+            elif key in {
+                "test_accuracy",
+                "final_validation_accuracy",
+                "best_validation_accuracy",
+                "best_validation_loss",
+                "best_epoch",
+            }:
                 name = key
             else:
                 continue
@@ -74,6 +80,16 @@ def _format_accuracy(value: object) -> str:
     ):
         return f"{value:.2%}"
     return "Not recorded"
+
+
+def validation_accuracy_from_metadata(
+    metadata: dict[str, int | float | str | bool],
+) -> int | float | str | bool | None:
+    """Return best-checkpoint accuracy, falling back to legacy metadata."""
+    return metadata.get(
+        "best_validation_accuracy",
+        metadata.get("final_validation_accuracy"),
+    )
 
 
 def render_sidebar(
@@ -143,7 +159,8 @@ def render_sidebar(
             sidebar.caption(f"Architecture: `{architecture}`")
             sidebar.caption(f"Trainable parameters: {parameter_count:,}")
 
-            validation_accuracy = metadata.get("final_validation_accuracy")
+            validation_accuracy = validation_accuracy_from_metadata(metadata)
+            best_epoch = metadata.get("best_epoch")
             test_accuracy = metadata.get("test_accuracy")
             seed = metadata.get("seed")
             modified = datetime.fromtimestamp(
@@ -155,6 +172,8 @@ def render_sidebar(
             sidebar.caption(
                 f"Validation accuracy: {_format_accuracy(validation_accuracy)}"
             )
+            if isinstance(best_epoch, int) and not isinstance(best_epoch, bool):
+                sidebar.caption(f"Selected checkpoint: epoch {best_epoch}")
             sidebar.caption(
                 "Test set: Not evaluated"
                 if test_accuracy is None

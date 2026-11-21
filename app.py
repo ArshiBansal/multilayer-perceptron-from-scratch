@@ -8,7 +8,7 @@ from pathlib import Path
 import streamlit as st
 
 from src.model import NumpyMLP
-from src.sidebar import render_sidebar
+from src.sidebar import render_sidebar, validation_accuracy_from_metadata
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 MODEL_PATH = PROJECT_ROOT / "models" / "mnist_mlp.npz"
@@ -29,7 +29,11 @@ def load_model_metadata(path: Path) -> dict[str, int | float | str | bool]:
         for key in artifact.files:
             if key.startswith("metadata_"):
                 name = key.removeprefix("metadata_")
-            elif key in {"test_accuracy", "final_validation_accuracy"}:
+            elif key in {
+                "test_accuracy",
+                "final_validation_accuracy",
+                "best_validation_accuracy",
+            }:
                 name = key
             else:
                 continue
@@ -114,7 +118,7 @@ if MODEL_PATH.is_file():
                 st.caption("EVALUATION TRAIL")
                 st.write(
                     "**Validation** · "
-                    f"{format_accuracy(metadata.get('final_validation_accuracy'))}"
+                    f"{format_accuracy(validation_accuracy_from_metadata(metadata))}"
                 )
                 st.write(f"**Official test set** · {test_status}")
                 st.caption(

@@ -165,7 +165,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--evaluate-test",
         action="store_true",
-        help="evaluate the final model once on the official MNIST test split",
+        help="evaluate the final model once on the official test split",
     )
     return parser
 
@@ -217,12 +217,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         y_validation,
         config=config,
     )
-    final_epoch = history.epochs[-1]
+    best_epoch = history.best_validation_epoch
 
     metadata: dict[str, int | float | str | bool] = {
         "seed": args.seed,
         "epochs": args.epochs,
-        "final_validation_accuracy": final_epoch.validation_accuracy,
+        "best_epoch": best_epoch.epoch,
+        "best_validation_accuracy": best_epoch.validation_accuracy,
+        "best_validation_loss": best_epoch.validation_loss,
     }
 
     if args.evaluate_test:

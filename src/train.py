@@ -70,6 +70,17 @@ class TrainingHistory:
 
     epochs: tuple[EpochMetrics, ...]
 
+    @property
+    def best_validation_epoch(self) -> EpochMetrics:
+        """Return the epoch with highest validation accuracy, then lowest loss."""
+        return max(
+            self.epochs,
+            key=lambda item: (
+                item.validation_accuracy,
+                -item.validation_loss,
+            ),
+        )
+
     def as_dict(self) -> dict[str, list[float]]:
         """Return metrics as lists, suitable for plotting or serialization."""
         return {
@@ -229,7 +240,9 @@ def train_model(
 
     Training and validation metrics are computed over each complete split after
     every epoch. Keep the official test set separate and evaluate it only after
-    model selection is complete.
+    model selection is complete. On return, ``model`` contains the parameters
+    from the epoch with the highest validation accuracy, breaking ties by lower
+    validation loss; the returned history still contains every epoch.
     """
     if config is None:
         config = TrainingConfig()
@@ -253,6 +266,8 @@ def train_model(
     )
     rng = np.random.default_rng(config.seed)
     records: list[EpochMetrics] = []
+    best_record: EpochMetrics | None = None
+    best_parameters: dict[str, NDArray[np.floating]] | None = None
 
     for epoch in range(1, config.epochs + 1):
         epoch_start = time.perf_counter()
@@ -295,6 +310,19 @@ def train_model(
         )
         records.append(record)
 
+        if (
+            best_record is None
+            or record.validation_accuracy > best_record.validation_accuracy
+            or (
+                record.validation_accuracy == best_record.validation_accuracy
+                and record.validation_loss < best_record.validation_loss
+            )
+        ):
+            best_record = record
+            best_parameters = {
+                name: parameter.copy() for name, parameter in model.params.items()
+            }
+
         if verbose:
             print(
                 f"Epoch {epoch:02d}/{config.epochs} | "
@@ -304,5 +332,10 @@ def train_model(
                 f"acc {record.validation_accuracy:.2%} | "
                 f"{record.elapsed_seconds:.1f}s"
             )
+
+    if best_parameters is None:
+        raise RuntimeError("Training completed without a validation checkpoint.")
+    for name, parameters in best_parameters.items():
+        np.copyto(model.params[name], parameters)
 
     return TrainingHistory(epochs=tuple(records))
