@@ -10,6 +10,7 @@ Then run:
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -44,31 +45,32 @@ def _nonnegative_int(value: str) -> int:
     return parsed
 
 
-def _positive_float(value: str) -> float:
+def _finite_float(value: str) -> float:
     try:
         parsed = float(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError("must be a number") from exc
+    if not math.isfinite(parsed):
+        raise argparse.ArgumentTypeError("must be finite")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    parsed = _finite_float(value)
     if parsed <= 0:
         raise argparse.ArgumentTypeError("must be positive")
     return parsed
 
 
 def _nonnegative_float(value: str) -> float:
-    try:
-        parsed = float(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be a number") from exc
+    parsed = _finite_float(value)
     if parsed < 0:
         raise argparse.ArgumentTypeError("must be non-negative")
     return parsed
 
 
 def _momentum(value: str) -> float:
-    try:
-        parsed = float(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be a number") from exc
+    parsed = _finite_float(value)
     if not 0 <= parsed < 1:
         raise argparse.ArgumentTypeError("must be in the range [0, 1)")
     return parsed
@@ -163,7 +165,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--evaluate-test",
         action="store_true",
-        help="evaluate the final model once on the official test split",
+        help="evaluate the final model once on the official MNIST test split",
     )
     return parser
 
