@@ -11,7 +11,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11%20%E2%80%93%203.13-526F8F?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![Model](https://img.shields.io/badge/Model-Pure%20NumPy-6675A8?style=flat-square)](https://numpy.org/)
 [![App](https://img.shields.io/badge/App-Streamlit-527C83?style=flat-square&logo=streamlit&logoColor=white)](https://streamlit.io/)
-[![Tests](https://img.shields.io/badge/Tests-11%20passing-527C83?style=flat-square)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-Test%20suite-527C83?style=flat-square)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-587F70?style=flat-square)](LICENSE)
 
 <br>
@@ -39,10 +39,10 @@
 
 <p align="justify">
 This repository is an end-to-end, educational handwritten-digit classification
-project. It brings together a multilayer perceptron implemented from scratch,
-an MNIST data and training pipeline, evaluation tools, guided notebooks, and a
-Streamlit app. It is designed to make the full path—from a pixel array to a
-prediction—visible, testable, and straightforward to experiment with.
+project. It combines a multilayer perceptron implemented from scratch with an
+MNIST data and training pipeline, evaluation tools, guided notebooks, and a
+Streamlit app. The full path—from pixel array to prediction—is made visible,
+testable, and straightforward to experiment with.
 </p>
 
 | Question | Answer |
@@ -58,10 +58,10 @@ prediction—visible, testable, and straightforward to experiment with.
 ### Why build the model from scratch?
 
 <p align="justify">
-High-level machine-learning frameworks make training convenient, but can hide
-the operations that produce a prediction. This project puts the essential
+High-level machine-learning frameworks make training convenient but can hide
+the operations that produce a prediction. This project places the essential
 operations in readable NumPy modules, so you can trace the data, inspect
-parameters, and compare the numerical gradients with finite differences.
+parameters, and compare numerical gradients with finite differences.
 TensorFlow/Keras is used only to retrieve MNIST; it does not define or train
 the classifier.
 </p>
@@ -77,7 +77,7 @@ the classifier.
 > “A prediction is the end of a computation; understanding the computation is
 > the point of this project.”
 
-<u>Model logic: NumPy.</u> Data loading: Keras. User interface: Streamlit.
+<u>Model logic: NumPy.</u> Data loading: TensorFlow/Keras. User interface: Streamlit.
 ~~A hidden framework training loop~~ is not part of the classifier.
 
 ### What can I learn or investigate?
@@ -98,12 +98,12 @@ and keep the official test set untouched until a configuration is selected.
 | Area | Details |
 |:--|:--|
 | **MLP implementation** | Fully connected classifier with ReLU or sigmoid hidden activations, He or Xavier initialization, stable softmax, and cross-entropy loss. |
-| **Training** | Mini-batch SGD with optional momentum and L2 regularization; seeded initialization, deterministic shuffling, and stratified train/validation splitting. |
+| **Training** | Mini-batch SGD with optional momentum and L2 regularization; seeded parameter initialization, deterministic shuffling, and stratified train/validation splitting. |
 | **Evaluation** | Aggregate loss and accuracy, confusion matrix, per-class precision/recall/F1, and per-example predictions and probabilities. |
-| **Digit prediction** | Upload up to 20 PNG, JPEG, BMP, GIF, TIFF, or WebP images per batch; inspect predictions in 3D probability and image-quality views, and export results as CSV. Unsupported or invalid files are reported without blocking valid images. |
+| **Digit prediction** | Upload up to 20 PNG, JPEG/JFIF, BMP/DIB, GIF, TIFF, or WebP images per batch; inspect predictions in 3D probability and image-quality views, and export results as CSV. Unsupported or invalid files are reported without blocking valid images. |
 | **Image quality tools** | Detect soft edges, compare original and sharpened crops as 3D surfaces, and optionally apply adjustable sharpening before inference. |
-| **Interactive visuals** | Explore 3D network architecture, pixel-intensity terrain, weight surfaces, a batch probability cloud, a batch-quality map, and an animated 3D forward pass based on an image's actual activations. |
-| **Model explainability** | Inspect network architecture, learned weight patterns, first-layer and output-weight surfaces, and the saved three-dimensional loss landscape. |
+| **Interactive visuals** | Explore 3D network architecture, pixel-intensity terrain, weight surfaces, a batch probability cloud, a batch-quality map, and an animated 3D forward pass driven by an image's actual activations. |
+| **Model explainability** | Inspect network architecture, learned weight patterns, first-layer and output-weight surfaces, and an available saved three-dimensional loss landscape. |
 | **Training & experiments** | Generate reproducible training commands, filter and compare validation runs, and export selected comparisons. |
 | **Model benchmark** | Measure median inference latency and throughput by batch size, and inspect parameter memory, model artifact size, and estimated multiply-accumulate operations. |
 | **Shared sidebar** | Select the saved model used by inference and inspection, tune 3D neuron detail and animation speed, and open the developer portfolio. |
@@ -120,15 +120,15 @@ and keep the official test set untouched until a configuration is selected.
 ## Dataset
 
 The project uses the [MNIST handwritten-digit
-dataset](https://keras.io/api/datasets/mnist/), loaded with
+dataset](https://keras.io/api/datasets/mnist/), loaded through
 `tensorflow.keras.datasets.mnist`.
 
 <p align="justify">
 Why MNIST? Its small images and ten familiar classes make it possible to
 visualize inputs, inspect model behavior, and run experiments on a personal
 computer without a specialized accelerator. It is a useful teaching benchmark,
-not a representative sample of all handwriting, documents, or real-world
-vision tasks.
+but it is not representative of every handwriting style, document layout, or
+real-world vision task.
 </p>
 
 | Property | Details |
@@ -160,13 +160,13 @@ wider networks.
 
 ```mermaid
 flowchart LR
-    X["28 x 28 image"] --> P["Normalize and flatten"]
-    P --> H1["Affine layer"]
-    H1 --> A1["ReLU or sigmoid"]
-    A1 --> HN["Additional hidden layers"]
-    HN --> O["Output logits"]
-    O --> S["Softmax probabilities"]
-    S --> Y["Predicted digit"]
+    X["28 × 28 grayscale image"] --> P["Normalize to [0, 1] and flatten"]
+    P --> H1["784 × hidden width 1 affine layer"]
+    H1 --> A1["ReLU or sigmoid hidden activation"]
+    A1 --> HN["Optional additional hidden layers"]
+    HN --> O["10-class output logits"]
+    O --> S["Stable row-wise softmax"]
+    S --> Y["Highest-probability digit"]
 
     classDef data fill:#DCE9EE,stroke:#527F94,color:#17333D
     classDef layer fill:#D7E8E2,stroke:#5F8F7A,color:#17333D
@@ -178,15 +178,15 @@ flowchart LR
 
 For a batch, each affine layer computes a weighted sum plus bias. Hidden layers
 apply ReLU or sigmoid; the output layer produces logits. Stable softmax maps
-the logits to class probabilities. The cross-entropy loss is computed directly
-from logits to avoid unnecessary numerical instability.
+the logits to class probabilities. Cross-entropy is computed from logits
+directly to avoid unnecessary numerical instability.
 
 ### Training flow
 
 ```mermaid
 flowchart TD
-    D["Load MNIST"] --> V["Create stratified train and validation splits"]
-    V --> R["Shuffle training indices"]
+    D["Load MNIST training pool and official test split"] --> V["Create stratified train and validation splits"]
+    V --> R["Shuffle the training indices"]
     R --> B["Select a mini-batch"]
     B --> F["Forward pass"]
     F --> L["Cross-entropy and optional L2 penalty"]
@@ -198,7 +198,7 @@ flowchart TD
     E --> N{"More epochs?"}
     N -- Yes --> R
     N -- No --> M["Save model and training metadata"]
-    D -. "Held out until final evaluation" .-> T["Optional official test evaluation"]
+    D -. "Official test split remains held out" .-> T["Optional final test evaluation"]
     M -. "After model selection" .-> T
 
     classDef data fill:#DCE9EE,stroke:#527F94,color:#17333D
@@ -249,10 +249,10 @@ script also loads it automatically if needed.
 Training uses the NumPy implementation and saves model parameters,
 architecture, and run metadata (including the seed and final validation
 accuracy) to `models/mnist_mlp.npz`. The repository includes a trained artifact
-for trying the app without training first. Retrain it to reproduce an
-experiment or create a model with different settings.
+so the app can be tried before retraining. Retrain the model to reproduce an
+experiment or test a different configuration.
 
-Run the notebooks in order:
+Run the notebooks in this order:
 
 `00_Data_Exploration` → `01_MLP_From_Scratch` → `02_Training_Experiments` →
 `03_Interpretability` → `04_3D_Loss_Landscape`
@@ -266,7 +266,7 @@ the reproducible path for producing the app's model artifact.
    recorded metrics.
 2. The prediction page accepts up to 20 PNG, JPEG/JFIF, BMP/DIB, GIF, TIFF, or
    WebP images (up to 5 MB each), prepares each as a centered 28 × 28 input, and
-   reports the top-three classes. Unsupported or unreadable files trigger a
+   reports the top three classes. Unsupported or unreadable files trigger a
    notification and are skipped while valid files continue.
 3. Review the 3D batch-quality and class-probability views plus the selected
    image's pixel terrain; optionally flag lower-scoring results for manual
@@ -294,7 +294,7 @@ Training is run separately from the command line.
 | `tests/` | Gradient checks, model serialization, and direct-command regression tests |
 | `notebooks/` | Guided data, training, and interpretability experiments |
 | `models/mnist_mlp.npz` | Included trained model and metadata |
-| `reports/figures/` | Saved loss-landscape data and visualization |
+| `reports/figures/` | Generated loss-landscape data and visualizations, when saved |
 
 ## Using the model API
 
@@ -351,8 +351,8 @@ Start the Streamlit app:
 python -m streamlit run app.py
 ```
 
-For training, notebooks, tests, and linting, install the additional
-dependencies:
+For training, notebooks, testing, and linting, install the additional
+development dependencies:
 
 ```powershell
 python -m pip install -r requirements-train.txt
