@@ -21,7 +21,7 @@ from src.visualize import (
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-MODEL_PATH = PROJECT_ROOT / "models" / "mnist_mlp.npz"
+MODEL_PATH = PROJECT_ROOT / "models" / "mnist_mlp_256_128.npz"
 REPORT_DIR = PROJECT_ROOT / "reports" / "figures"
 
 

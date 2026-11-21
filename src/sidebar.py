@@ -111,7 +111,7 @@ def render_sidebar(
         model_names = [path.name for path in model_paths]
         preferred_name = st.session_state.get(
             "active_model_artifact",
-            "mnist_mlp.npz",
+            "mnist_mlp_256_128.npz",
         )
         if preferred_name not in model_names:
             preferred_name = model_names[0]
