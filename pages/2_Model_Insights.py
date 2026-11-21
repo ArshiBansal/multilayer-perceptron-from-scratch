@@ -8,6 +8,7 @@ import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.app_sidebar import render_sidebar
 from src.model import NumpyMLP
 from src.visualize import plot_first_layer_weights, plot_loss_landscape
 
@@ -58,6 +59,7 @@ st.set_page_config(
     page_icon="📊",
     layout="wide",
 )
+render_sidebar()
 
 st.title("Model Insights")
 st.write(

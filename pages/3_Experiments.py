@@ -11,6 +11,8 @@ from typing import Any
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.app_sidebar import render_sidebar
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RESULTS_PATH = PROJECT_ROOT / "reports" / "experiments.csv"
 
@@ -135,6 +137,7 @@ st.set_page_config(
     page_icon="🧪",
     layout="wide",
 )
+render_sidebar()
 
 st.title("Experiment Lab")
 st.write(

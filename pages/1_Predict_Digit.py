@@ -9,6 +9,7 @@ import numpy as np
 import streamlit as st
 from PIL import Image, ImageOps, UnidentifiedImageError
 
+from src.app_sidebar import render_sidebar
 from src.model import NumpyMLP
 from src.visualize import plot_prediction
 
@@ -85,6 +86,7 @@ st.set_page_config(
     page_icon="🔢",
     layout="centered",
 )
+render_sidebar()
 
 st.title("Predict a handwritten digit")
 st.write(

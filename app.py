@@ -6,6 +6,7 @@ from pathlib import Path
 
 import streamlit as st
 
+from src.app_sidebar import render_sidebar
 from src.model import NumpyMLP
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -50,6 +51,7 @@ st.set_page_config(
     page_icon="🧠",
     layout="wide",
 )
+render_sidebar()
 
 st.title("MNIST Multi-Layer Perceptron")
 st.markdown(
