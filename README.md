@@ -51,7 +51,7 @@ testable, and straightforward to experiment with.
 | **Why does it exist?** | To make neural-network mechanics concrete and explore how model and training choices change behavior. |
 | **How does it work?** | Normalize pixels, pass them through dense layers, compute a loss, backpropagate gradients, and update parameters with SGD. |
 | **Who is it for?** | Learners and educators who want to inspect or modify a compact neural-network implementation. |
-| **What do I get?** | A trained model artifact, a CLI training pipeline, tests, notebooks, and an interactive app. |
+| **What do I get?** | A best-validation model artifact, a CLI training pipeline, tests, notebooks, and an interactive app. |
 
 <p align="right"><em>One image in. Ten class scores out. Every step in between is open to inspection.</em></p>
 
@@ -98,7 +98,7 @@ and keep the official test set untouched until a configuration is selected.
 | Area | Details |
 |:--|:--|
 | **MLP implementation** | Fully connected classifier with ReLU or sigmoid hidden activations, He or Xavier initialization, stable softmax, and cross-entropy loss. |
-| **Training** | Mini-batch SGD with optional momentum and L2 regularization; seeded parameter initialization, deterministic shuffling, and stratified train/validation splitting. |
+| **Training** | Mini-batch SGD with optional momentum and L2 regularization; seeded parameter initialization, deterministic shuffling, stratified train/validation splitting, and restoration of the best-validation checkpoint. |
 | **Evaluation** | Aggregate loss and accuracy, confusion matrix, per-class precision/recall/F1, and per-example predictions and probabilities. |
 | **Digit prediction** | Upload up to 20 PNG, JPEG/JFIF, BMP/DIB, GIF, TIFF, or WebP images per batch; inspect predictions in 3D probability and image-quality views, and export results as CSV. Unsupported or invalid files are reported without blocking valid images. |
 | **Image quality tools** | Detect soft edges, compare original and sharpened crops as 3D surfaces, and optionally apply adjustable sharpening before inference. |
@@ -106,7 +106,7 @@ and keep the official test set untouched until a configuration is selected.
 | **Model explainability** | Inspect network architecture, learned weight patterns, first-layer and output-weight surfaces, and an available saved three-dimensional loss landscape. |
 | **Training & experiments** | Generate reproducible training commands, filter and compare validation runs, and export selected comparisons. |
 | **Model benchmark** | Measure median inference latency and throughput by batch size, and inspect parameter memory, model artifact size, and estimated multiply-accumulate operations. |
-| **Shared sidebar** | Select the saved model used by inference and inspection, tune 3D neuron detail and animation speed, and open the developer portfolio. |
+| **Shared sidebar** | Select the saved model used by inference and inspection, view its validation accuracy and selected checkpoint epoch when recorded, tune 3D neuron detail and animation speed, and open the developer portfolio. |
 | **Notebooks** | Data exploration, a from-scratch MLP, training experiments, interpretability, and 3D loss-landscape analysis. |
 
 <div align="center">
@@ -147,7 +147,8 @@ thresholds, crops, resizes, and centers a digit on a 28 × 28 canvas.
 > [!CAUTION]
 > Keep the official test split out of training and model selection. Use the
 > validation split to compare configurations; evaluate on the test split only
-> after choosing a model.
+> after choosing a model. The CLI's `--evaluate-test` option evaluates the
+> selected best-validation checkpoint once; test results do not affect selection.
 
 ## How it works
 
@@ -197,9 +198,10 @@ flowchart TD
     C -- No --> E["Measure train and validation metrics"]
     E --> N{"More epochs?"}
     N -- Yes --> R
-    N -- No --> M["Save model and training metadata"]
-    D -. "Official test split remains held out" .-> T["Optional final test evaluation"]
-    M -. "After model selection" .-> T
+    N -- No --> S["Select best validation checkpoint"]
+    S --> M["Save selected model and training metadata"]
+    D -. "Official test split remains held out" .-> T["Optional --evaluate-test"]
+    M -. "Selected checkpoint; test metrics do not affect selection" .-> T
 
     classDef data fill:#DCE9EE,stroke:#527F94,color:#17333D
     classDef train fill:#D7E8E2,stroke:#5F8F7A,color:#17333D
@@ -213,6 +215,13 @@ The backward pass computes the gradients of the batch loss with respect to
 weights and biases. SGD applies the update; optional momentum accumulates
 updates, and L2 regularization penalizes large weights. Training and validation
 metrics are measured after each epoch.
+
+After the final epoch, the training script selects the checkpoint with the
+highest validation accuracy; when accuracy ties, it selects the lower
+validation loss. The saved model parameters come from that selected epoch, while
+the training history and console output retain metrics for every epoch. Artifact
+metadata records `best_epoch`, `best_validation_accuracy`, and
+`best_validation_loss`.
 
 <p align="left">
 <strong>Why separate train, validation, and test data?</strong> The training
@@ -246,11 +255,12 @@ MNIST is retrieved through Keras and stored in its local cache. The helper
 `scripts/download_data.py` validates and preloads the dataset; the training
 script also loads it automatically if needed.
 
-Training uses the NumPy implementation and saves model parameters,
-architecture, and run metadata (including the seed and final validation
-accuracy) to `models/mnist_mlp.npz`. The repository includes a trained artifact
-so the app can be tried before retraining. Retrain the model to reproduce an
-experiment or test a different configuration.
+Training uses the NumPy implementation and saves the best-validation model
+parameters, architecture, and run metadata (including the seed,
+`best_epoch`, `best_validation_accuracy`, and `best_validation_loss`) to
+`models/mnist_mlp.npz`. The repository includes a trained artifact so the app
+can be tried before retraining. Retrain the model to reproduce an experiment
+or test a different configuration.
 
 Run the notebooks in this order:
 
@@ -262,8 +272,9 @@ the reproducible path for producing the app's model artifact.
 
 ### What happens when I use the app?
 
-1. The Home page loads the saved model and displays its architecture and
-   recorded metrics.
+1. The Home page loads the saved model and displays its architecture,
+   validation accuracy, and recorded test status. New CLI artifacts report
+   the best-validation checkpoint; older artifacts may report their final epoch.
 2. The prediction page accepts up to 20 PNG, JPEG/JFIF, BMP/DIB, GIF, TIFF, or
    WebP images (up to 5 MB each), prepares each as a centered 28 × 28 input, and
    reports the top three classes. Unsupported or unreadable files trigger a
@@ -293,7 +304,7 @@ Training is run separately from the command line.
 | `scripts/` | Dataset download/validation and CLI training |
 | `tests/` | Gradient checks, model serialization, and direct-command regression tests |
 | `notebooks/` | Guided data, training, and interpretability experiments |
-| `models/mnist_mlp.npz` | Included trained model and metadata |
+| `models/mnist_mlp.npz` | Included model artifact and metadata; CLI training saves the best-validation checkpoint |
 | `reports/figures/` | Generated loss-landscape data and visualizations, when saved |
 
 ## Using the model API
@@ -312,8 +323,10 @@ in `[0, 1]` before passing them to the model.
 | `save(path, metadata=...)` / `NumpyMLP.load(path)` | Persist and restore a model | Compressed `.npz` artifact |
 
 Saved artifacts contain the architecture, activation and initialization names,
-weight and bias arrays, and optional scalar metadata. Loading uses NumPy's
-non-pickle mode.
+weight and bias arrays, and optional scalar metadata. CLI-trained artifacts
+record `best_epoch`, `best_validation_accuracy`, and `best_validation_loss`;
+their parameters are from that selected epoch. Loading uses NumPy's non-pickle
+mode.
 
 ## Comparing experiment results
 
@@ -375,9 +388,11 @@ python scripts/train.py `
   --seed 42
 ```
 
-By default, the model is saved to `models/mnist_mlp.npz`. Use `--output PATH`
-to choose a different artifact path. Add `--evaluate-test` to evaluate once on
-the official test set after model selection.
+By default, the best-validation checkpoint is saved to `models/mnist_mlp.npz`.
+Use `--output PATH` to choose a different artifact path. Add
+`--evaluate-test` to evaluate that selected checkpoint once on the official,
+held-out test set after model selection; test results do not affect checkpoint
+selection.
 
 > [!TIP]
 > Run commands from the repository root and use the same Python interpreter
@@ -386,20 +401,21 @@ the official test set after model selection.
 ## Reproducibility & evaluation
 
 The default seed (`42`) controls model initialization, the stratified
-train/validation split, and mini-batch shuffling. The seed and final validation
-accuracy are saved in artifact metadata. The same seed makes the data and
-initialization choices repeatable; small numeric differences can still occur
-across library versions or hardware.
+train/validation split, and mini-batch shuffling. The seed and selected
+checkpoint's epoch, validation accuracy, and validation loss are saved in
+artifact metadata. The same seed makes the data and initialization choices
+repeatable; small numeric differences can still occur across library versions
+or hardware.
 
 The test suite includes finite-difference checks for gradients, cross-entropy
 reduction checks, a model save/load round trip, and direct-script invocation
 checks. Run `python -m pytest` to execute them.
 
 Training records train and validation loss/accuracy after every epoch in its
-console output. The saved `.npz` artifact contains the model parameters,
-architecture, and selected run metadata. The Streamlit UI labels output
-probabilities as model scores because they are **not calibrated confidence
-estimates**.
+console output. The saved `.npz` artifact contains the best-validation
+checkpoint's model parameters, architecture, and selected run metadata. The
+Streamlit UI labels output probabilities as model scores because they are
+**not calibrated confidence estimates**.
 
 ## Development
 
